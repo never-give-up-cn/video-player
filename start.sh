@@ -27,6 +27,17 @@ if [ ! -d "node_modules" ]; then
     npm install
 fi
 
+# Kill old processes (ffmpeg, port 3000, old Vite ports)
+echo -e "${YELLOW}[信息] 清理残留进程...${NC}"
+pkill -f ffmpeg 2>/dev/null || true
+for port in 3000 8080 8081 8082 8083; do
+    if command -v lsof &>/dev/null; then
+        lsof -ti:$port | xargs kill -9 2>/dev/null || true
+    elif command -v fuser &>/dev/null; then
+        fuser -k "${port}/tcp" 2>/dev/null || true
+    fi
+done
+
 # Determine Python command
 PYTHON_CMD=""
 if command -v python3 &>/dev/null; then

@@ -14,6 +14,25 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
+:: Kill old processes (ffmpeg + port 3000 + old Vite ports)
+echo [信息] 清理残留进程...
+taskkill /f /im ffmpeg.exe >nul 2>&1
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":3000"') do (
+    if %%p gtr 0 taskkill /f /pid %%p >nul 2>&1
+)
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":8080"') do (
+    if %%p gtr 0 taskkill /f /pid %%p >nul 2>&1
+)
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":8081"') do (
+    if %%p gtr 0 taskkill /f /pid %%p >nul 2>&1
+)
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":8082"') do (
+    if %%p gtr 0 taskkill /f /pid %%p >nul 2>&1
+)
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":8083"') do (
+    if %%p gtr 0 taskkill /f /pid %%p >nul 2>&1
+)
+
 :: Install deps if needed
 if not exist "node_modules" (
     echo [信息] 正在安装依赖...
