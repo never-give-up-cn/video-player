@@ -1,0 +1,6 @@
+node_modules/
+dist/
+server/cache/thumbs/
+server/cache/*.json
+*.log
+.DS_Store
