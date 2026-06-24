@@ -112,6 +112,66 @@ npm run dev
 
 > **注意：** 如果 ffmpeg 被强制终止，可能留下不完整的 `.jpg` 文件，重启后会被视为"已存在"而跳过修复。如需重新生成，删除 `server/cache/thumbs/` 目录下对应文件即可。
 
+### 页面加载很慢怎么办？
+
+首次启动或长时间未访问后，页面加载慢通常由以下原因导致：
+
+1. **缩略图生成占 CPU** — 启动时后台会用 ffmpeg 生成缩略图，CPU 占用较高。等待缩略图生成完毕即可恢复正常。
+2. **Vite 冷编译** — 开发模式下 Vite 首次访问需要编译所有 Vue 组件，后续访问会快很多。
+3. **端口冲突** — 如果多次启动产生了残留 Node 进程，用 `taskkill /f /im node.exe` 清理后重启。
+
+### 如何添加新视频？
+
+将视频文件放入 `E:\照片` 目录下的任意子文件夹即可（支持 mp4/mkv/avi/mov/flv 等常见格式）。
+
+默认加载缓存文件 `server/cache/video-cache.json`，如需强制重新扫描，删除该缓存文件后重启服务器。
+
+> 扫描目录路径在 `server/services/scanner.js` 中 `VIDEO_DIR` 变量定义，可修改为其他目录。
+
+### 如何修改端口？
+
+- **前端端口**: 修改 `vite.config.js` 中 `server.port` 的值（默认 8080）
+- **后端端口**: 修改 `server/index.js` 中 `PORT` 变量的值（默认 3000）
+- 前端配置了代理转发，修改后端端口后需同步更新 `vite.config.js` 中 `server.proxy` 的目标地址
+
+### 没有安装 MySQL 能运行吗？
+
+**可以。** 服务器在 MySQL 不可用时会自动降级为内存存储模式，评论、弹幕、播放量数据会保存在内存中（重启后丢失）。数据库连接失败不影响视频浏览和播放功能。
+
+如需使用 MySQL，确保数据库运行在 `127.0.0.1:3306`，用户名 `root`，密码 `123456`，数据库 `video_player` 会自动创建。
+
+### 视频不显示 / 列表为空？
+
+1. 确认 `E:\照片` 目录存在且有视频文件
+2. 查看启动日志，确认是否显示 `[Scanner] Loaded X videos from cache`
+3. 访问 `http://localhost:3000/api/health` 检查服务状态
+4. 如果缓存文件损坏，删除 `server/cache/video-cache.json` 后重启
+5. 检查后端端口 3000 是否被其他程序占用
+
+### 如何安全停止服务器？
+
+按 `Ctrl + C` 即可优雅关闭前后端服务。如果终端已关闭导致残留进程：
+
+```bash
+# 查看占用端口的进程
+netstat -ano | findstr :3000
+netstat -ano | findstr :8080
+
+# 强制终止
+taskkill /f /pid <进程ID>
+```
+
+也可以直接用 `taskkill /f /im node.exe` 杀掉所有 Node 进程（注意会影响其他 Node 应用）。
+
+### 如何更新前端页面样式？
+
+前端源码在 `src/` 目录下：
+
+- `src/App.vue` — 根组件，全局布局
+- `src/views/` — 页面级组件
+- `src/components/` — 可复用组件
+- 项目使用 Vite 开发服务器，修改代码后页面会自动热更新
+
 ## 项目结构
 
 ```
