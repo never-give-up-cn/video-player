@@ -4,3 +4,6 @@ server/cache/thumbs/
 server/cache/*.json
 *.log
 .DS_Store
+__pycache__/
+*.pyc
+write_bat.py
