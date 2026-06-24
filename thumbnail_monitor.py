@@ -335,6 +335,10 @@ class ThumbnailMonitor:
         self.btn_stop.config(state='disabled')
         self.btn_start.config(state='disabled')
 
+    def _on_close(self):
+        self.running = False
+        self.root.destroy()
+
 
 def main():
     root = tk.Tk()
