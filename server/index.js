@@ -63,7 +63,7 @@ async function start() {
     const missingCount = scanner.getVideos(1, 0).total - existingThumbs.size
     if (missingCount > 0) {
       console.log(`[Server] ${missingCount} thumbnails missing, generating in background...`)
-      scanner.generateAllThumbnails(1).then(result => {
+      scanner.generateAllThumbnails(8).then(result => {
         console.log(`[Server] Background thumbnail gen: ${result.generated} ok, ${result.failed} failed`)
       })
     }
