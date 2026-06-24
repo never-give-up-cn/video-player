@@ -29,13 +29,6 @@ class ThumbnailMonitor:
     card_bg = '#161b22'
     border = '#30363d'
 
-    STATUS_ICONS = {
-        'generating': '🎬',
-        'completed':  '✅',
-        'failed':     '❌',
-        'pending':    '⏳',
-    }
-
     def __init__(self, root):
         self.root = root
         self.root.title('缩略图生成进度 v3')
@@ -109,62 +102,51 @@ class ThumbnailMonitor:
         self._stat_item(row1, '耗时', '0s', self.accent, 'left')
         self._stat_item(row1, '并发', '0', self.fg, 'left')
 
-        # ====== Video progress table ======
-        table_header = tk.Frame(self.root, bg=self.bg)
-        table_header.pack(fill='x', padx=16, pady=(4, 2))
-        tk.Label(table_header, text='视频进度:',
+        # ====== Three-column video panels ======
+        panels = tk.Frame(self.root, bg=self.bg)
+        panels.pack(fill='both', padx=16, pady=(4, 12), expand=True)
+
+        # -- 生成中 (left) --
+        left = tk.Frame(panels, bg=self.card_bg, highlightbackground=self.border, highlightthickness=1)
+        left.pack(side='left', fill='both', expand=True)
+        tk.Label(left, text='🎬 生成中',
                  font=('Microsoft YaHei', 10, 'bold'),
-                 bg=self.bg, fg=self.fg).pack(side='left')
+                 bg=self.card_bg, fg=self.orange).pack(anchor='w', padx=8, pady=(6, 2))
+        tk.Frame(left, bg=self.border, height=1).pack(fill='x', padx=4)
+        self.gen_list = tk.Listbox(left, height=12,
+                                   bg=self.card_bg, fg=self.orange,
+                                   font=('Consolas', 9),
+                                   borderwidth=0, highlightthickness=0,
+                                   relief='flat', selectbackground='#1f6feb')
+        self.gen_list.pack(fill='both', padx=4, pady=(2, 6), expand=True)
 
-        container = tk.Frame(self.root, bg=self.bg, highlightbackground=self.border, highlightthickness=1)
-        container.pack(fill='both', padx=16, pady=(0, 12), expand=True)
+        # -- 排队中 (middle) --
+        mid = tk.Frame(panels, bg=self.card_bg, highlightbackground=self.border, highlightthickness=1)
+        mid.pack(side='left', fill='both', expand=True, padx=(6, 0))
+        tk.Label(mid, text='⏳ 排队中',
+                 font=('Microsoft YaHei', 10, 'bold'),
+                 bg=self.card_bg, fg='#8b949e').pack(anchor='w', padx=8, pady=(6, 2))
+        tk.Frame(mid, bg=self.border, height=1).pack(fill='x', padx=4)
+        self.pending_list = tk.Listbox(mid, height=12,
+                                       bg=self.card_bg, fg='#8b949e',
+                                       font=('Consolas', 9),
+                                       borderwidth=0, highlightthickness=0,
+                                       relief='flat', selectbackground='#1f6feb')
+        self.pending_list.pack(fill='both', padx=4, pady=(2, 6), expand=True)
 
-        # Scrollbar
-        scrollbar = tk.Scrollbar(container, bg=self.card_bg, troughcolor=self.bg)
-        scrollbar.pack(side='right', fill='y')
-
-        # Treeview with 3 columns: icon, filename, progress_text
-        style = ttk.Style()
-        style.theme_use('clam')
-        style.configure('Treeview',
-                        background=self.card_bg,
-                        foreground=self.fg,
-                        fieldbackground=self.card_bg,
-                        borderwidth=0,
-                        font=('Consolas', 9))
-        style.configure('Treeview.Heading',
-                        background=self.card_bg,
-                        foreground=self.fg,
-                        borderwidth=0,
-                        font=('Microsoft YaHei', 9, 'bold'))
-        style.map('Treeview', background=[('selected', '#1f6feb')])
-
-        self.tree = ttk.Treeview(container, columns=('icon', 'file', 'bar', 'status'),
-                                 show='tree headings', height=16,
-                                 yscrollcommand=scrollbar.set)
-        self.tree.heading('#0', text='')
-        self.tree.column('#0', width=0, stretch=False)
-        self.tree.heading('icon', text='')
-        self.tree.column('icon', width=36, anchor='center')
-        self.tree.heading('file', text='文件名')
-        self.tree.column('file', width=400)
-        self.tree.heading('bar', text='进度')
-        self.tree.column('bar', width=120, anchor='center')
-        self.tree.heading('status', text='状态')
-        self.tree.column('status', width=100, anchor='center')
-
-        self.tree.pack(side='left', fill='both', expand=True)
-        scrollbar.config(command=self.tree.yview)
-
-        # Button states
-        self.btn_stop.config(state='disabled')
-        self.btn_start.config(state='disabled')
-
-        # Tag colors
-        self.tree.tag_configure('generating', foreground=self.orange)
-        self.tree.tag_configure('completed', foreground=self.green)
-        self.tree.tag_configure('failed', foreground=self.red)
-        self.tree.tag_configure('pending', foreground='#8b949e')
+        # -- 已完成 (right) --
+        right = tk.Frame(panels, bg=self.card_bg, highlightbackground=self.border, highlightthickness=1)
+        right.pack(side='left', fill='both', expand=True, padx=(6, 0))
+        tk.Label(right, text='✅ 已完成',
+                 font=('Microsoft YaHei', 10, 'bold'),
+                 bg=self.card_bg, fg=self.green).pack(anchor='w', padx=8, pady=(6, 2))
+        tk.Frame(right, bg=self.border, height=1).pack(fill='x', padx=4)
+        self.done_list = tk.Listbox(right, height=12,
+                                    bg=self.card_bg, fg=self.green,
+                                    font=('Consolas', 9),
+                                    borderwidth=0, highlightthickness=0,
+                                    relief='flat', selectbackground='#1f6feb')
+        self.done_list.pack(fill='both', padx=4, pady=(2, 6), expand=True)
 
     def _stat_item(self, parent, label, value, color, side):
         frame = tk.Frame(parent, bg=self.card_bg)
@@ -175,11 +157,6 @@ class ThumbnailMonitor:
                        bg=self.card_bg, fg=color)
         lbl.pack(anchor='w')
         setattr(self, f'stat_{label}', lbl)
-
-    def _make_bar(self, pct, width=10):
-        """Build a text progress bar like ████░░░░"""
-        filled = round(pct / 100 * width)
-        return '█' * filled + '░' * (width - filled)
 
     # ---- Button handlers ----
 
@@ -268,67 +245,44 @@ class ThumbnailMonitor:
         self.stat_耗时.config(text=elapsed_str)
         self.stat_并发.config(text=str(concurrency))
 
-        # ---- Build unified video list ----
-        # Combine: current (generating) + recent completed + failed files + pending
-        rows = []
+        # ---- Fill three panels ----
+        bar_w = 8
 
-        # 1. Currently generating
-        seen = set()
-        for f in current_files:
-            rows.append((f, 'generating'))
-            seen.add(f)
+        # 生成中
+        self.gen_list.delete(0, 'end')
+        if current_files:
+            for f in current_files:
+                display = f if len(f) <= 42 else f'...{f[-39:]}'
+                bar = '█' * (bar_w // 2) + '░' * (bar_w - bar_w // 2)
+                self.gen_list.insert('end', f'  {bar}  {display}')
+        else:
+            self.gen_list.insert('end', '  (无)')
 
-        # 2. Completed (most recent first)
-        for item in reversed(recent_completed):
-            f = item.get('file', '')
-            if f not in seen:
-                rows.append((f, 'completed'))
-                seen.add(f)
+        # 排队中
+        self.pending_list.delete(0, 'end')
+        if pending_files:
+            for f in pending_files:
+                display = f if len(f) <= 48 else f'...{f[-45:]}'
+                self.pending_list.insert('end', f'  {display}')
+        else:
+            self.pending_list.insert('end', '  (无)')
 
-        # 3. Failed
-        for f in reversed(failed_files):
-            if f not in seen:
-                rows.append((f, 'failed'))
-                seen.add(f)
-
-        # 4. Pending (next in queue)
-        for f in pending_files:
-            if f not in seen:
-                rows.append((f, 'pending'))
-                seen.add(f)
-
-        # Update treeview
-        self.tree.delete(*self.tree.get_children())
-
-        generating_count = 0
-        pending_count = 0
-        for filename, st in rows:
-            icon = self.STATUS_ICONS.get(st, '⏳')
-            if st == 'generating':
-                generating_count += 1
-                bar_text = self._make_bar(50)  # indeterminate look
-                status_text = '生成中...'
-            elif st == 'completed':
-                bar_text = self._make_bar(100)
-                status_text = '已完成'
-            elif st == 'failed':
-                bar_text = self._make_bar(100)
-                status_text = '失败'
-            else:
-                pending_count += 1
-                bar_text = self._make_bar(0)
-                status_text = '排队中'
-
-            display_name = filename if len(filename) <= 48 else f'...{filename[-45:]}'
-            self.tree.insert('', 'end', text='',
-                             values=(icon, display_name, bar_text, status_text),
-                             tags=(st,))
-
-        # If nothing shown, add placeholder
-        if not rows:
-            self.tree.insert('', 'end', text='',
-                             values=('', '(无活动任务)', '', ''),
-                             tags=('pending',))
+        # 已完成 + 失败
+        self.done_list.delete(0, 'end')
+        has_done = False
+        if recent_completed:
+            has_done = True
+            for item in reversed(recent_completed):
+                f = item.get('file', '')
+                display = f if len(f) <= 44 else f'...{f[-41:]}'
+                self.done_list.insert('end', f'  ✅ {display}')
+        if failed_files:
+            has_done = True
+            for f in reversed(failed_files):
+                display = f if len(f) <= 44 else f'...{f[-41:]}'
+                self.done_list.insert('end', f'  ❌ {display}')
+        if not has_done:
+            self.done_list.insert('end', '  (无)')
 
     def _set_offline(self):
         self.status_label.config(text='❌ 无法连接服务器 (localhost:3000)', fg=self.red)
