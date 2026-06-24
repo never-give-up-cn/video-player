@@ -51,22 +51,22 @@ async function start() {
   scanner.loadCache()
   console.log(`[Server] ${scanner.getVideos(1, 0).total} videos indexed`)
 
-  // Generate thumbnails for first 200 videos on startup (then continue in background)
-  const existingThumbs = new Set()
-  try {
-    fs.readdirSync(THUMB_DIR).forEach(f => existingThumbs.add(f))
-  } catch {}
-  const missingCount = scanner.getVideos(1, 0).total - existingThumbs.size
-  if (missingCount > 0) {
-    console.log(`[Server] ${missingCount} thumbnails missing, generating in background...`)
-    scanner.generateAllThumbnails(3).then(result => {
-      console.log(`[Server] Background thumbnail gen: ${result.generated} ok, ${result.failed} failed`)
-    })
-  }
-
   app.listen(PORT, () => {
     console.log(`[Server] Video Player backend running at http://localhost:${PORT}`)
     console.log(`[Server] API: http://localhost:${PORT}/api/videos`)
+
+    // Generate thumbnails in background after server is listening
+    const existingThumbs = new Set()
+    try {
+      fs.readdirSync(THUMB_DIR).forEach(f => existingThumbs.add(f))
+    } catch {}
+    const missingCount = scanner.getVideos(1, 0).total - existingThumbs.size
+    if (missingCount > 0) {
+      console.log(`[Server] ${missingCount} thumbnails missing, generating in background...`)
+      scanner.generateAllThumbnails(1).then(result => {
+        console.log(`[Server] Background thumbnail gen: ${result.generated} ok, ${result.failed} failed`)
+      })
+    }
   })
 }
 

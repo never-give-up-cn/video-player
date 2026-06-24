@@ -219,6 +219,7 @@ function formatDuration(secs) {
  */
 function generateAllThumbnails(concurrency = 4) {
   let idx = 0
+  let active = 0
   let generated = 0
   let failed = 0
 
@@ -248,35 +249,40 @@ function generateAllThumbnails(concurrency = 4) {
     console.log(`[Scanner] Generating ${pending.length} missing thumbnails (concurrency: ${concurrency})`)
 
     function next() {
-      while (idx < pending.length) {
-        const video = pending[idx++]
-        const thumbPath = path.join(THUMB_DIR, `${video.id}.jpg`)
-        const cmd = `"${FFMPEG_PATH}" -ss 00:00:02 -i "${video.filePath}" -vframes 1 -vf "scale=480:-1" -q:v 5 "${thumbPath}" -y 2>nul`
-        exec(cmd, { timeout: 30000 }, (err) => {
-          if (err) {
-            // try first frame
-            const cmd2 = `"${FFMPEG_PATH}" -i "${video.filePath}" -vframes 1 -vf "scale=480:-1" -q:v 5 "${thumbPath}" -y 2>nul`
-            exec(cmd2, { timeout: 30000 }, (err2) => {
-              if (err2) failed++
-              else generated++
-              if (generated + failed >= pending.length) {
-                console.log(`[Scanner] Thumbnails done: ${generated} generated, ${failed} failed`)
-                resolve({ generated, failed })
-              }
-            })
-          } else {
-            generated++
+      if (idx >= pending.length) return
+      const video = pending[idx++]
+      active++
+      const thumbPath = path.join(THUMB_DIR, `${video.id}.jpg`)
+      const cmd = `"${FFMPEG_PATH}" -ss 00:00:02 -i "${video.filePath}" -vframes 1 -vf "scale=480:-1" -q:v 5 "${thumbPath}" -y 2>nul`
+      exec(cmd, { timeout: 30000 }, (err) => {
+        active--
+        if (err) {
+          // try first frame
+          const cmd2 = `"${FFMPEG_PATH}" -i "${video.filePath}" -vframes 1 -vf "scale=480:-1" -q:v 5 "${thumbPath}" -y 2>nul`
+          exec(cmd2, { timeout: 30000 }, (err2) => {
+            if (err2) failed++
+            else generated++
             if (generated + failed >= pending.length) {
               console.log(`[Scanner] Thumbnails done: ${generated} generated, ${failed} failed`)
               resolve({ generated, failed })
+            } else {
+              next()
             }
+          })
+        } else {
+          generated++
+          if (generated + failed >= pending.length) {
+            console.log(`[Scanner] Thumbnails done: ${generated} generated, ${failed} failed`)
+            resolve({ generated, failed })
+          } else {
+            next()
           }
-        })
-      }
+        }
+      })
     }
 
     // Start N concurrent workers
-    for (let i = 0; i < concurrency; i++) {
+    for (let i = 0; i < Math.min(concurrency, pending.length); i++) {
       next()
     }
   })

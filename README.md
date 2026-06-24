@@ -44,6 +44,8 @@ npm run start
 
 浏览器打开: **http://localhost:8080**
 
+> 如果 8080 端口被占用，Vite 会自动切换到下一个可用端口（8081/8082...），启动日志中会显示实际地址。
+
 ## 单独启动
 
 ```bash
@@ -78,3 +80,41 @@ npm run dev
 | POST | /api/video/:id/danmaku | 发送弹幕 |
 | POST | /api/video/:id/like | 点赞/取消 |
 | POST | /api/video/:id/follow | 关注/取消 |
+| GET | /api/health | 服务健康检查 |
+
+## 性能优化
+
+### 缩略图生成
+
+首次启动时，服务器会为所有视频生成缩略图（后台任务，不影响服务响应）：
+
+- **并发控制**: 默认 1 个 ffmpeg 进程并发，避免 CPU 过载
+- **生成策略**: 先取视频第 2 秒画面，失败则回退到首帧
+- **缓存复用**: 已有缩略图自动跳过，重启不重复生成
+
+服务器启动后会立即开始监听端口，缩略图生成在后台静默进行。
+
+## 项目结构
+
+```
+video-player/
+├── index.html              # 入口 HTML
+├── package.json
+├── vite.config.js          # Vite 配置（含 API 代理）
+├── start.bat               # Windows 快捷启动脚本
+├── src/                    # 前端 Vue 源码
+│   ├── main.js
+│   ├── App.vue
+│   ├── router/
+│   ├── views/
+│   ├── components/
+│   └── api/
+├── server/                 # 后端 Express 服务
+│   ├── index.js
+│   ├── db.js
+│   ├── routes/
+│   ├── services/
+│   │   └── scanner.js      # 视频扫描 + 缩略图生成
+│   └── cache/              # 视频缓存 + 缩略图
+└── public/
+```
