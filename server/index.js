@@ -44,6 +44,24 @@ app.get('/api/thumbnail-progress', (req, res) => {
   })
 })
 
+// Stop thumbnail generation
+app.post('/api/thumbnail/stop', (req, res) => {
+  scanner.stopThumbnailGeneration()
+  res.json({ code: 0, msg: 'stopped' })
+})
+
+// Start thumbnail generation
+app.post('/api/thumbnail/start', (req, res) => {
+  scanner.startThumbnailGeneration(8)
+  res.json({ code: 0, msg: 'started' })
+})
+
+// Delete all thumbnails
+app.delete('/api/thumbnails', (req, res) => {
+  scanner.deleteAllThumbnails()
+  res.json({ code: 0, msg: 'all thumbnails deleted' })
+})
+
 // Ensure cache directory exists
 const THUMB_DIR = path.join(__dirname, 'cache', 'thumbs')
 if (!fs.existsSync(THUMB_DIR)) {
@@ -64,14 +82,12 @@ async function start() {
     console.log(`[Server] API: http://localhost:${PORT}/api/videos`)
 
     // Generate thumbnails in background after server is listening
-    const existingThumbs = new Set()
-    try {
-      fs.readdirSync(THUMB_DIR).forEach(f => existingThumbs.add(f))
-    } catch {}
-    const missingCount = scanner.getVideos(1, 0).total - existingThumbs.size
+    const missingCount = scanner.getVideos(1, 0).total - (() => {
+      try { return fs.readdirSync(THUMB_DIR).length } catch { return 0 }
+    })()
     if (missingCount > 0) {
       console.log(`[Server] ${missingCount} thumbnails missing, generating in background...`)
-      scanner.generateAllThumbnails(8).then(result => {
+      scanner.startThumbnailGeneration(8).then(result => {
         console.log(`[Server] Background thumbnail gen: ${result.generated} ok, ${result.failed} failed`)
       })
     }

@@ -23,21 +23,69 @@ let scanProgress = { total: 0, current: 0, status: 'idle' }
 
 // Thumbnail generation progress (for external monitoring)
 let thumbnailProgress = {
-  status: 'idle',   // 'idle' | 'generating' | 'done'
+  status: 'idle',   // 'idle' | 'generating' | 'done' | 'stopped'
   total: 0,
   completed: 0,
   failed: 0,
   remaining: 0,
-  currentFiles: [],  // files being processed right now
+  currentFiles: [],      // files being processed right now
+  recentCompleted: [],   // last 10 completed files [{file, time}]
+  failedFiles: [],       // list of failed file paths
   startTime: null,
-  elapsed: 0         // ms since start
+  elapsed: 0,            // ms since start
+  concurrency: 8
 }
 
+let _activeProcesses = new Set()
+let _cancelFlag = false
+let _resolveGenerate = null
+
 function getThumbnailProgress() {
-  if (thumbnailProgress.status === 'generating' && thumbnailProgress.startTime) {
+  if ((thumbnailProgress.status === 'generating' || thumbnailProgress.status === 'stopped') && thumbnailProgress.startTime) {
     thumbnailProgress.elapsed = Date.now() - thumbnailProgress.startTime
   }
   return { ...thumbnailProgress }
+}
+
+function stopThumbnailGeneration() {
+  if (thumbnailProgress.status !== 'generating') return
+  _cancelFlag = true
+  _activeProcesses.forEach(cp => { try { cp.kill('SIGKILL') } catch {} })
+  _activeProcesses.clear()
+  thumbnailProgress.status = 'stopped'
+  thumbnailProgress.currentFiles = []
+  thumbnailProgress.elapsed = Date.now() - thumbnailProgress.startTime
+  if (_resolveGenerate) {
+    _resolveGenerate({ generated: thumbnailProgress.completed, failed: thumbnailProgress.failed, stopped: true })
+    _resolveGenerate = null
+  }
+}
+
+function startThumbnailGeneration(concurrency) {
+  if (thumbnailProgress.status === 'generating') return
+  _cancelFlag = false
+  return generateAllThumbnails(concurrency || 8)
+}
+
+function deleteAllThumbnails() {
+  // Stop any ongoing generation first
+  stopThumbnailGeneration()
+  // Remove and recreate thumbs directory
+  if (fs.existsSync(THUMB_DIR)) {
+    fs.rmSync(THUMB_DIR, { recursive: true, force: true })
+  }
+  fs.mkdirSync(THUMB_DIR, { recursive: true })
+  // Reset progress
+  thumbnailProgress.status = 'idle'
+  thumbnailProgress.total = 0
+  thumbnailProgress.completed = 0
+  thumbnailProgress.failed = 0
+  thumbnailProgress.remaining = 0
+  thumbnailProgress.currentFiles = []
+  thumbnailProgress.recentCompleted = []
+  thumbnailProgress.failedFiles = []
+  thumbnailProgress.startTime = null
+  thumbnailProgress.elapsed = 0
 }
 
 /**
@@ -243,8 +291,12 @@ function generateAllThumbnails(concurrency = 4) {
   let failed = 0
 
   return new Promise((resolve) => {
-    if (!videoCache.length) {
-      thumbnailProgress = { status: 'done', total: 0, completed: 0, failed: 0, remaining: 0, currentFiles: [], startTime: null, elapsed: 0 }
+    _resolveGenerate = resolve
+
+    if (_cancelFlag || !videoCache.length) {
+      thumbnailProgress = { status: 'done', total: 0, completed: 0, failed: 0, remaining: 0,
+        currentFiles: [], recentCompleted: [], failedFiles: [], startTime: null, elapsed: 0, concurrency }
+      _resolveGenerate = null
       resolve({ generated: 0, failed: 0 })
       return
     }
@@ -262,69 +314,84 @@ function generateAllThumbnails(concurrency = 4) {
     const pending = videoCache.filter(v => !existing.has(`${v.id}.jpg`))
     if (!pending.length) {
       console.log('[Scanner] All thumbnails already generated')
-      thumbnailProgress = { status: 'done', total: 0, completed: 0, failed: 0, remaining: 0, currentFiles: [], startTime: null, elapsed: 0 }
+      thumbnailProgress = { status: 'done', total: 0, completed: 0, failed: 0, remaining: 0,
+        currentFiles: [], recentCompleted: [], failedFiles: [], startTime: null, elapsed: 0, concurrency }
+      _resolveGenerate = null
       resolve({ generated: 0, failed: 0 })
       return
     }
 
-    // Init progress tracking
+    // Init progress
     thumbnailProgress.status = 'generating'
     thumbnailProgress.total = pending.length
     thumbnailProgress.completed = 0
     thumbnailProgress.failed = 0
     thumbnailProgress.remaining = pending.length
     thumbnailProgress.currentFiles = []
+    thumbnailProgress.recentCompleted = []
+    thumbnailProgress.failedFiles = []
     thumbnailProgress.startTime = Date.now()
     thumbnailProgress.elapsed = 0
+    thumbnailProgress.concurrency = concurrency
 
     console.log(`[Scanner] Generating ${pending.length} missing thumbnails (concurrency: ${concurrency})`)
 
     function next() {
-      if (idx >= pending.length) return
+      if (_cancelFlag || idx >= pending.length) return
       const video = pending[idx++]
       active++
 
-      // Track active file
       const fileLabel = video.relativePath || video.fileName
       thumbnailProgress.currentFiles.push(fileLabel)
 
       const thumbPath = path.join(THUMB_DIR, `${video.id}.jpg`)
       const cmd = `"${FFMPEG_PATH}" -ss 00:00:02 -i "${video.filePath}" -vframes 1 -vf "scale=480:-1" -q:v 5 "${thumbPath}" -y 2>nul`
-      exec(cmd, { timeout: 30000 }, (err) => {
+      const cp = exec(cmd, { timeout: 30000 }, (err) => {
+        _activeProcesses.delete(cp)
         active--
-
-        // Remove from active files
         const fi = thumbnailProgress.currentFiles.indexOf(fileLabel)
         if (fi !== -1) thumbnailProgress.currentFiles.splice(fi, 1)
 
         if (err) {
-          // try first frame
+          // fallback: try first frame
           const cmd2 = `"${FFMPEG_PATH}" -i "${video.filePath}" -vframes 1 -vf "scale=480:-1" -q:v 5 "${thumbPath}" -y 2>nul`
-          exec(cmd2, { timeout: 30000 }, (err2) => {
+          const cp2 = exec(cmd2, { timeout: 30000 }, (err2) => {
+            _activeProcesses.delete(cp2)
             if (err2) {
               failed++
               thumbnailProgress.failed = failed
+              thumbnailProgress.failedFiles.push(fileLabel)
+              if (thumbnailProgress.failedFiles.length > 10) thumbnailProgress.failedFiles.shift()
             } else {
               generated++
               thumbnailProgress.completed = generated
+              thumbnailProgress.recentCompleted.push({ file: fileLabel, time: new Date().toLocaleTimeString() })
+              if (thumbnailProgress.recentCompleted.length > 10) thumbnailProgress.recentCompleted.shift()
             }
             thumbnailProgress.remaining = pending.length - (generated + failed)
+            if (_cancelFlag) return
             if (generated + failed >= pending.length) {
               thumbnailProgress.status = 'done'
               thumbnailProgress.elapsed = Date.now() - thumbnailProgress.startTime
+              _resolveGenerate = null
               console.log(`[Scanner] Thumbnails done: ${generated} generated, ${failed} failed`)
               resolve({ generated, failed })
             } else {
               next()
             }
           })
+          _activeProcesses.add(cp2)
         } else {
           generated++
           thumbnailProgress.completed = generated
+          thumbnailProgress.recentCompleted.push({ file: fileLabel, time: new Date().toLocaleTimeString() })
+          if (thumbnailProgress.recentCompleted.length > 10) thumbnailProgress.recentCompleted.shift()
           thumbnailProgress.remaining = pending.length - (generated + failed)
+          if (_cancelFlag) return
           if (generated + failed >= pending.length) {
             thumbnailProgress.status = 'done'
             thumbnailProgress.elapsed = Date.now() - thumbnailProgress.startTime
+            _resolveGenerate = null
             console.log(`[Scanner] Thumbnails done: ${generated} generated, ${failed} failed`)
             resolve({ generated, failed })
           } else {
@@ -332,6 +399,7 @@ function generateAllThumbnails(concurrency = 4) {
           }
         }
       })
+      _activeProcesses.add(cp)
     }
 
     // Start N concurrent workers
@@ -351,5 +419,8 @@ module.exports = {
   generateAllThumbnails,
   getScanProgress: () => scanProgress,
   getThumbnailProgress,
+  stopThumbnailGeneration,
+  startThumbnailGeneration,
+  deleteAllThumbnails,
   VIDEO_DIR
 }
