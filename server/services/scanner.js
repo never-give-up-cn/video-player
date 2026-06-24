@@ -84,6 +84,7 @@ function deleteAllThumbnails() {
   thumbnailProgress.currentFiles = []
   thumbnailProgress.recentCompleted = []
   thumbnailProgress.failedFiles = []
+  thumbnailProgress.pendingFiles = []
   thumbnailProgress.startTime = null
   thumbnailProgress.elapsed = 0
 }
@@ -295,7 +296,8 @@ function generateAllThumbnails(concurrency = 4) {
 
     if (_cancelFlag || !videoCache.length) {
       thumbnailProgress = { status: 'done', total: 0, completed: 0, failed: 0, remaining: 0,
-        currentFiles: [], recentCompleted: [], failedFiles: [], startTime: null, elapsed: 0, concurrency }
+        currentFiles: [], recentCompleted: [], failedFiles: [], pendingFiles: [],
+        startTime: null, elapsed: 0, concurrency }
       _resolveGenerate = null
       resolve({ generated: 0, failed: 0 })
       return
@@ -315,7 +317,8 @@ function generateAllThumbnails(concurrency = 4) {
     if (!pending.length) {
       console.log('[Scanner] All thumbnails already generated')
       thumbnailProgress = { status: 'done', total: 0, completed: 0, failed: 0, remaining: 0,
-        currentFiles: [], recentCompleted: [], failedFiles: [], startTime: null, elapsed: 0, concurrency }
+        currentFiles: [], recentCompleted: [], failedFiles: [], pendingFiles: [],
+        startTime: null, elapsed: 0, concurrency }
       _resolveGenerate = null
       resolve({ generated: 0, failed: 0 })
       return
@@ -333,6 +336,7 @@ function generateAllThumbnails(concurrency = 4) {
     thumbnailProgress.startTime = Date.now()
     thumbnailProgress.elapsed = 0
     thumbnailProgress.concurrency = concurrency
+    thumbnailProgress.pendingFiles = pending.slice(0, 30).map(v => v.relativePath || v.fileName)
 
     console.log(`[Scanner] Generating ${pending.length} missing thumbnails (concurrency: ${concurrency})`)
 
@@ -342,7 +346,18 @@ function generateAllThumbnails(concurrency = 4) {
       active++
 
       const fileLabel = video.relativePath || video.fileName
+      // Remove from pending list, add to current
+      const pi = thumbnailProgress.pendingFiles.indexOf(fileLabel)
+      if (pi !== -1) thumbnailProgress.pendingFiles.splice(pi, 1)
       thumbnailProgress.currentFiles.push(fileLabel)
+      // Refill pending list
+      if (idx + thumbnailProgress.pendingFiles.length < pending.length) {
+        const nextBatch = []
+        for (let i = idx + thumbnailProgress.pendingFiles.length; i < Math.min(idx + 30, pending.length); i++) {
+          nextBatch.push(pending[i].relativePath || pending[i].fileName)
+        }
+        thumbnailProgress.pendingFiles.push(...nextBatch)
+      }
 
       const thumbPath = path.join(THUMB_DIR, `${video.id}.jpg`)
       const cmd = `"${FFMPEG_PATH}" -ss 00:00:02 -i "${video.filePath}" -vframes 1 -vf "scale=480:-1" -q:v 5 "${thumbPath}" -y 2>nul`
