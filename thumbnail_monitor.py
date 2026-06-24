@@ -157,7 +157,7 @@ class ThumbnailMonitor:
             else:
                 self.status_label.config(text='✅ 全部生成完成', fg=self.green)
 
-        self.stat_completed.config(text=str(completed))
+        self.stat_已完成.config(text=str(completed))
         self.stat_失败.config(text=str(failed))
         self.stat_剩余.config(text=str(remaining))
         self.stat_总计.config(text=str(total))
