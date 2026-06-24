@@ -25,6 +25,22 @@ if not exist "node_modules" (
     )
 )
 
+:: Check Python and launch monitor window
+where python >nul 2>&1
+if %errorlevel% equ 0 (
+    python -c "import requests" >nul 2>&1
+    if %errorlevel% equ 0 (
+        echo [信息] 启动缩略图生成监控窗口...
+        start "缩略图监控" python thumbnail_monitor.py
+    ) else (
+        echo [信息] Python requests 库未安装，跳过监控窗口
+        echo [信息] 可运行: pip install requests
+    )
+) else (
+    echo [信息] Python 未安装，跳过监控窗口
+)
+
+echo.
 echo [信息] 启动后端服务器 (端口 3000)...
 echo [信息] 启动前端开发服务器 (端口 8080)...
 echo.
