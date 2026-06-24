@@ -36,6 +36,14 @@ app.get('/api/health', (req, res) => {
   })
 })
 
+// Thumbnail generation progress
+app.get('/api/thumbnail-progress', (req, res) => {
+  res.json({
+    code: 0,
+    data: scanner.getThumbnailProgress()
+  })
+})
+
 // Ensure cache directory exists
 const THUMB_DIR = path.join(__dirname, 'cache', 'thumbs')
 if (!fs.existsSync(THUMB_DIR)) {

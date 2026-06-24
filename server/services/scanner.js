@@ -21,6 +21,25 @@ const VIDEO_EXTS = new Set([
 let videoCache = []
 let scanProgress = { total: 0, current: 0, status: 'idle' }
 
+// Thumbnail generation progress (for external monitoring)
+let thumbnailProgress = {
+  status: 'idle',   // 'idle' | 'generating' | 'done'
+  total: 0,
+  completed: 0,
+  failed: 0,
+  remaining: 0,
+  currentFiles: [],  // files being processed right now
+  startTime: null,
+  elapsed: 0         // ms since start
+}
+
+function getThumbnailProgress() {
+  if (thumbnailProgress.status === 'generating' && thumbnailProgress.startTime) {
+    thumbnailProgress.elapsed = Date.now() - thumbnailProgress.startTime
+  }
+  return { ...thumbnailProgress }
+}
+
 /**
  * Scan directory recursively for video files
  */
@@ -225,6 +244,7 @@ function generateAllThumbnails(concurrency = 4) {
 
   return new Promise((resolve) => {
     if (!videoCache.length) {
+      thumbnailProgress = { status: 'done', total: 0, completed: 0, failed: 0, remaining: 0, currentFiles: [], startTime: null, elapsed: 0 }
       resolve({ generated: 0, failed: 0 })
       return
     }
@@ -242,9 +262,20 @@ function generateAllThumbnails(concurrency = 4) {
     const pending = videoCache.filter(v => !existing.has(`${v.id}.jpg`))
     if (!pending.length) {
       console.log('[Scanner] All thumbnails already generated')
+      thumbnailProgress = { status: 'done', total: 0, completed: 0, failed: 0, remaining: 0, currentFiles: [], startTime: null, elapsed: 0 }
       resolve({ generated: 0, failed: 0 })
       return
     }
+
+    // Init progress tracking
+    thumbnailProgress.status = 'generating'
+    thumbnailProgress.total = pending.length
+    thumbnailProgress.completed = 0
+    thumbnailProgress.failed = 0
+    thumbnailProgress.remaining = pending.length
+    thumbnailProgress.currentFiles = []
+    thumbnailProgress.startTime = Date.now()
+    thumbnailProgress.elapsed = 0
 
     console.log(`[Scanner] Generating ${pending.length} missing thumbnails (concurrency: ${concurrency})`)
 
@@ -252,17 +283,35 @@ function generateAllThumbnails(concurrency = 4) {
       if (idx >= pending.length) return
       const video = pending[idx++]
       active++
+
+      // Track active file
+      const fileLabel = video.relativePath || video.fileName
+      thumbnailProgress.currentFiles.push(fileLabel)
+
       const thumbPath = path.join(THUMB_DIR, `${video.id}.jpg`)
       const cmd = `"${FFMPEG_PATH}" -ss 00:00:02 -i "${video.filePath}" -vframes 1 -vf "scale=480:-1" -q:v 5 "${thumbPath}" -y 2>nul`
       exec(cmd, { timeout: 30000 }, (err) => {
         active--
+
+        // Remove from active files
+        const fi = thumbnailProgress.currentFiles.indexOf(fileLabel)
+        if (fi !== -1) thumbnailProgress.currentFiles.splice(fi, 1)
+
         if (err) {
           // try first frame
           const cmd2 = `"${FFMPEG_PATH}" -i "${video.filePath}" -vframes 1 -vf "scale=480:-1" -q:v 5 "${thumbPath}" -y 2>nul`
           exec(cmd2, { timeout: 30000 }, (err2) => {
-            if (err2) failed++
-            else generated++
+            if (err2) {
+              failed++
+              thumbnailProgress.failed = failed
+            } else {
+              generated++
+              thumbnailProgress.completed = generated
+            }
+            thumbnailProgress.remaining = pending.length - (generated + failed)
             if (generated + failed >= pending.length) {
+              thumbnailProgress.status = 'done'
+              thumbnailProgress.elapsed = Date.now() - thumbnailProgress.startTime
               console.log(`[Scanner] Thumbnails done: ${generated} generated, ${failed} failed`)
               resolve({ generated, failed })
             } else {
@@ -271,7 +320,11 @@ function generateAllThumbnails(concurrency = 4) {
           })
         } else {
           generated++
+          thumbnailProgress.completed = generated
+          thumbnailProgress.remaining = pending.length - (generated + failed)
           if (generated + failed >= pending.length) {
+            thumbnailProgress.status = 'done'
+            thumbnailProgress.elapsed = Date.now() - thumbnailProgress.startTime
             console.log(`[Scanner] Thumbnails done: ${generated} generated, ${failed} failed`)
             resolve({ generated, failed })
           } else {
@@ -297,5 +350,6 @@ module.exports = {
   getVideoDuration,
   generateAllThumbnails,
   getScanProgress: () => scanProgress,
+  getThumbnailProgress,
   VIDEO_DIR
 }
