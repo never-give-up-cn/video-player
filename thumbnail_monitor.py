@@ -6,7 +6,7 @@
 """
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 import requests
 import threading
 import time
@@ -28,11 +28,15 @@ class ThumbnailMonitor:
     def __init__(self, root):
         self.root = root
         self.root.title('缩略图生成进度')
-        self.root.geometry('680+400+300+200')
+        self.root.geometry('680x400+300+200')
         self.root.configure(bg=self.bg)
         self.root.resizable(False, False)
 
-        self._build_ui()
+        try:
+            self._build_ui()
+        except Exception as e:
+            messagebox.showerror('启动错误', f'UI初始化失败:\n{e}')
+            raise
         self.running = True
         self.poll_thread = threading.Thread(target=self._poll_loop, daemon=True)
         self.poll_thread.start()
