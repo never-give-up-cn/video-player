@@ -30,12 +30,16 @@ if not exist "node_modules" (
     )
 )
 
-where python >nul 2>&1
+set PY_CMD=python
+where python3 >nul 2>&1
+if %errorlevel% equ 0 set PY_CMD=python3
+
+where %PY_CMD% >nul 2>&1
 if %errorlevel% equ 0 (
-    python -c "import requests" >nul 2>&1
+    %PY_CMD% -c "import requests" >nul 2>&1
     if %errorlevel% equ 0 (
         echo [信息] 启动缩略图监控窗口...
-        start "" python thumbnail_monitor.py
+        start "" %PY_CMD% thumbnail_monitor.py
     ) else (
         echo [信息] requests未安装,跳过监控
     )
